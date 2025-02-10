@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bowling Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://d3js.org/d3.v6.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; background-color: #f9f9f9; }
+        table { width: 90%; margin: auto; border-collapse: collapse; background: white; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: center; cursor: pointer; }
+        th { background-color: #333; color: white; }
+        th:hover { background-color: #555; }
+        .gray-out { background-color: #d3d3d3 !important; color: transparent !important; }
+        canvas { margin-top: 20px; max-width: 90%; }
+    </style>
+</head>
+<body>
+
+    <h1 id="page-title">Bowling Stats Dashboard</h1>
+
+    <h2 id="bowlers-title">Loading Statistics...</h2>
+
+    <table id="stats-table">
+        <thead>
+            <tr id="table-header"></tr>
+        </thead>
+        <tbody id="table-body"></tbody>
+    </table>
+
+    <!-- <h2>Bowler Scores Over Time</h2> -->
+    <!-- <canvas id="bowlerChart"></canvas> -->
+
+    <script>
+        let originalData = []; // Store Original Order
+        let lastSortedColumn = null; // Track last sorted column
+
+        // Function to generate a random hex color if missing
+        function getRandomColor() {
+            return "#" + Math.floor(Math.random()*16777215).toString(16);
+        }
+
+        // Fetch JSON data
+        fetch('bowlers.json')
+            .then(response => response.json())
+            .then(data => {
+                let bowlers = data.bowlers || [];
+                let scores = data.scores || [];
+
+                // Update Title with Unique Bowlers Count
+                document.getElementById("bowlers-title").textContent = `Statistics of ${bowlers.length} Unique Bowlers`;
+
+                // Store original order of data
+                originalData = [...bowlers];
+
+                // Assign random colors if hexcode is missing
+                bowlers.forEach(bowler => {
+                    if (!bowler.hexcode || bowler.hexcode === "NaN") {
+                        bowler.hexcode = getRandomColor();
+                    }
+                });
+
+                // Table Setup
+                let tableHeader = document.getElementById("table-header");
+                let tableBody = document.getElementById("table-body");
+
+                // Define Column Headers
+                let headers = [
+                    { key: "bowler", label: "Full Name" },
+                    { key: "disp", label: "Display" },
+                    { key: "hexcode", label: "Hexcode" },
+                    { key: "pr", label: "PR" },
+                    { key: "avg", label: "Avg" },
+                    { key: "diff", label: "Diff" },
+                    { key: "2024-07", label: "2024-07" },
+                    { key: "2024-08", label: "2024-08" },
+                    { key: "2024-09", label: "2024-09" },
+                    { key: "2024-10", label: "2024-10" },
+                    { key: "2024-11", label: "2024-11" },
+                    { key: "2024-12", label: "2024-12" },
+                    { key: "2025-01", label: "2025-01" },
+                    { key: "2025-02", label: "2025-02" },
+                    { key: "hundred_plus", label: "100+" },
+                    { key: "total", label: "Total" },
+                    { key: "100+(%)", label: "100+(%)" }
+                ];
+
+                // Create Table Header with Sorting
+                headers.forEach((col, index) => {
+                    let th = document.createElement("th");
+                    th.textContent = col.label;
+                    th.dataset.key = col.key;
+                    th.dataset.order = "asc"; // Default sorting order
+                    th.addEventListener("click", function() {
+                        if (lastSortedColumn !== col.key) {
+                            resetSort(); // Reset sorting only when switching columns
+                        }
+                        lastSortedColumn = col.key;
+                        sortTable(index, col.key);
+                    });
+                    tableHeader.appendChild(th);
+                });
+
+                // Function to Populate Table
+                function populateTable(data) {
+                    tableBody.innerHTML = ""; // Clear existing table rows
+                    data.forEach(bowler => {
+                        let row = tableBody.insertRow();
+                        headers.forEach(col => {
+                            let cell = row.insertCell();
+                            let value = bowler[col.key];
+
+                            if (col.key === "hexcode") {
+                                let colorBox = document.createElement("div");
+                                colorBox.style.width = "20px";
+                                colorBox.style.height = "20px";
+                                colorBox.style.backgroundColor = bowler.hexcode;
+                                colorBox.style.margin = "auto";
+                                cell.appendChild(colorBox);
+                            } else if (["hundred_plus", "total", "diff"].includes(col.key)) {
+                                cell.textContent = isNaN(value) || value === undefined ? "0" : Math.round(value);
+                            } else if (["2024-07", "2024-08", "2024-09", "2024-10", "2024-11", "2024-12", "2025-01", "2025-02"].includes(col.key)) {
+                                if (isNaN(value) || value === undefined || value === "N/A") {
+                                    cell.classList.add("gray-out"); // Gray out cell
+                                    cell.textContent = "";
+                                } else {
+                                    cell.textContent = value.toFixed(2);
+                                }
+                            } else if (typeof value === "number") {
+                                cell.textContent = isNaN(value) || value === undefined ? "0.00" : value.toFixed(2);
+                            } else {
+                                cell.textContent = value || "N/A";
+                            }
+                        });
+                    });
+                }
+
+                // Initial Population of Table
+                populateTable(bowlers);
+
+                // Function to Reset Sorting (Restore Original Order)
+                function resetSort() {
+                    bowlers = [...originalData]; // Restore original order
+                }
+
+                // Function to Sort Table
+                function sortTable(columnIndex, key) {
+                    let header = tableHeader.children[columnIndex];
+                    let order = header.dataset.order;
+
+                    // Sort data properly (treat `N/A` as 0 for sorting)
+                    bowlers.sort((a, b) => {
+                        let valueA = a[key] === "N/A" || a[key] === undefined ? 0 : a[key];
+                        let valueB = b[key] === "N/A" || b[key] === undefined ? 0 : b[key];
+
+                        // Convert to numbers if applicable
+                        if (!isNaN(valueA) && !isNaN(valueB)) {
+                            valueA = parseFloat(valueA);
+                            valueB = parseFloat(valueB);
+                        }
+
+                        if (order === "asc") {
+                            return valueA > valueB ? 1 : -1;
+                        } else {
+                            return valueA < valueB ? 1 : -1;
+                        }
+                    });
+
+                    // Toggle sorting order
+                    header.dataset.order = order === "asc" ? "desc" : "asc";
+
+                    // Repopulate Table with Sorted Data
+                    populateTable(bowlers);
+                }
+
+                function updateChart() {
+                    let ctx = document.getElementById("bowlerChart").getContext("2d");
+
+                    // Extract Unique Dates (Removing Time)
+                    let dates = [...new Set(scores.map(s => s.date.split(" ")[0]))].sort();
+
+                    let datasets = bowlers
+                        .filter(bowler => selectedBowlers.has(bowler.disp)) // Only include selected bowlers
+                        .map(bowler => ({
+                            label: bowler.disp,
+                            data: scores
+                                .filter(s => s.disp === bowler.disp)
+                                .map(s => ({
+                                    x: new Date(s.date.split(" ")[0]), // Convert date string to Date object
+                                    y: parseFloat(s.score) // Convert score to number
+                                })),
+                            borderColor: bowler.hexcode,
+                            backgroundColor: bowler.hexcode,
+                            pointRadius: 5
+                        }));
+
+                    // Destroy existing chart before creating a new one
+                    if (chartInstance) chartInstance.destroy();
+                    
+                    chartInstance = new Chart(ctx, {
+                        type: "scatter",
+                        data: { datasets: datasets },
+                        options: {
+                            responsive: true,
+                            plugins: {
+                                title: { display: true, text: "Bowler Scores Over Time" }
+                            },
+                            scales: {
+                                x: {
+                                    type: "time",
+                                    time: { unit: "day", tooltipFormat: "yyyy-MM-dd" },
+                                    title: { display: true, text: "Date" }
+                                },
+                                y: {
+                                    title: { display: true, text: "Score" },
+                                    beginAtZero: true
+                                }
+                            }
+                        }
+                    });
+                }
+            })
+            
+            .catch(error => console.error("Error loading JSON:", error));
+    </script>
+
+</body>
+</html>
